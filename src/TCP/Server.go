@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -32,13 +31,11 @@ func handleConnection(c net.Conn) {
 }
 
 func main() {
-	arguments := os.Args
-	if len(arguments) == 1 {
-		fmt.Println("Please provide a port number!")
-		return
-	}
-
-	PORT := ":" + arguments[1]
+	fmt.Println("Indica el puerto en  el que escuchar solicitudes")
+	var port string
+	fmt.Scanln(&port)
+	fmt.Print(port)
+	PORT := ":" + port
 	l, err := net.Listen("tcp4", PORT)
 	if err != nil {
 		fmt.Println(err)

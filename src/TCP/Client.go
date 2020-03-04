@@ -9,13 +9,13 @@ import (
 )
 
 func main() {
-	arguments := os.Args
-	if len(arguments) == 1 {
-		fmt.Println("Please provide host:port.")
-		return
-	}
+	fmt.Println("Indica la direccion:puerto a la cual desea conectarse")
 
-	CONNECT := arguments[1]
+	var port string
+	fmt.Scanln(&port)
+	fmt.Print(port)
+
+	CONNECT := port
 	c, err := net.Dial("tcp", CONNECT)
 	if err != nil {
 		fmt.Println(err)
