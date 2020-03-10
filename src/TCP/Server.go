@@ -2,82 +2,121 @@ package main
 
 import (
 	"bufio"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"strconv"
-	"strings"
 )
 
-var count = 0
+var logger *log.Logger
 
-func handleConnection(c net.Conn) {
-	fmt.Print(".")
-	for {
-		netData, err := bufio.NewReader(c).ReadString('\n')
+func enviarArchivo (conn net.Conn, srcFile string, nCLiente int) bool {
+
+	// Abre el archivo a enviar
+	arch, err := os.Open(srcFile)
+	if err != nil {
+		fmt.Println(err)
+		logger.Println("Hubo un error enviando el archivo al cliente " + strconv.Itoa(nCLiente))
+		return false
+	}
+	defer arch.Close()
+
+	hash := crearHash(arch)
+
+	if hash != "" {
+		// Envía el archivo al cliente
+		_, err = io.Copy(conn, arch)
 		if err != nil {
 			fmt.Println(err)
-			return
+			logger.Println("Hubo un error enviando el archivo al cliente " + strconv.Itoa(nCLiente))
+			return false
 		}
 
-		temp := strings.TrimSpace(string(netData))
-		if temp == "STOP" {
-			break
-		}
-		fmt.Println(temp)
-		counter := strconv.Itoa(count) + "\n"
-		c.Write([]byte(string(counter)))
+		fmt.Fprintf(conn, hash)
+
+	} else {
+		logger.Println("Hubo un error enviando el archivo al cliente " + strconv.Itoa(nCLiente))
+		return false
 	}
-	c.Close()
+
+	defer conn.Close()
+
+	logger.Println("Se envió correctamente el archivo al cliente " + strconv.Itoa(nCLiente))
+
+	return true
 }
 
-func sendFile(server net.Listener, srcFile string) {
-	// accept connection
-	conn, err := server.Accept()
+func crearHash (archivo *os.File) string {
+
+	// Crea una interfaz para realizar el hash
+	hash := md5.New()
+
+	// Copia el archivo a la interfaz
+	_, err := io.Copy(hash, archivo)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return ""
 	}
 
-	// open file to send
-	fi, err := os.Open(srcFile)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer fi.Close()
+	// Obtiene el hash en 16 bytes
+	hashInBytes := hash.Sum(nil)[:16]
 
-	// send file to client
-	_, err = io.Copy(conn, fi)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	// Convierte el hash a String
+	return hex.EncodeToString(hashInBytes)
 }
 
 func main() {
+
+	logFile, err := os.Create("data/log.txt")
+	logger = log.New(logFile, ">>", log.LstdFlags)
+
 	fmt.Println("Indica el puerto en  el que escuchar solicitudes")
 	var port string
 	fmt.Scanln(&port)
 	fmt.Print(port)
 	PORT := ":" + port
-	l, err := net.Listen("tcp4", PORT)
+	socket, err := net.Listen("tcp4", PORT)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	defer l.Close()
+	defer socket.Close()
 
-	for {
-		c, err := l.Accept()
+	fmt.Println("Ingrese qué seleccion quiere enviar:\n(1) video1.mp4\n(2) video2.mp4")
+	var seleccion string
+	var archivo string
+
+	fmt.Scanln(&seleccion)
+	if seleccion == "1" {
+		archivo = "data/video1.mp4"
+	} else {
+		archivo = "data/video2.mp4"
+	}
+
+	fmt.Println("Ingrese el número de usuarios que espera atender")
+	var numero int
+	fmt.Scanln(&numero)
+
+	for i := 0; i < numero; i++ {
+		conn, err := socket.Accept()
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		go handleConnection(c)
-		count++
+
+		inCliente, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if inCliente == "Listo" {
+			go enviarArchivo(conn, archivo, i)
+		}
+
 	}
 }
 
