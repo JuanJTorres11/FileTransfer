@@ -2,87 +2,87 @@ package main
 
 import (
 	"bufio"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
-	"strings"
+	"time"
 )
 
-func uploadFile(srcFile, serverAddr string) {
-	// connect to server
-	conn, err := net.Dial("tcp", serverAddr)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer conn.Close()
+func descargar (dstFile string, conn net.Conn) bool {
 
-	// open file to upload
-	fi, err := os.Open(srcFile)
+	// Crea el archivo para luego guardar en este lo que se descarga
+	archivo, err := os.Create(dstFile)
 	if err != nil {
 		fmt.Println(err)
-		return
+		return false
 	}
-	defer fi.Close()
+	defer archivo.Close()
 
-	// upload
-	_, err = io.Copy(conn, fi)
+	// Copia el archivo recibido
+	_, err = io.Copy(archivo, conn)
 	if err != nil {
 		fmt.Println(err)
-		return
+		return false
 	}
+
+	// Obtiene el hash del servidor
+	hash, _ := bufio.NewReader(conn).ReadString('\n')
+
+	return verificarIntegridad(archivo, hash)
 }
 
-func downloadFile(dstFile, serverAddr string) {
-	// create new file to hold response
-	fo, err := os.Create(dstFile)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer fo.Close()
+func verificarIntegridad (archivo *os.File, hashRecibido string) bool {
 
-	// connect to server
-	conn, err := net.Dial("tcp", serverAddr)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer conn.Close()
+	// Crea una interfaz para realizar el hash
+	hash := md5.New()
 
-	_, err = io.Copy(fo, conn)
+	// Copia el archivo a la interfaz
+	_, err := io.Copy(hash, archivo)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return false
 	}
+
+	// Obtiene el hash en 16 bytes
+	hashInBytes := hash.Sum(nil)[:16]
+
+	// Convierte el hash a String
+	if hex.EncodeToString(hashInBytes) != hashRecibido {
+		return false
+	}
+
+	return true
 }
 
 func main() {
 	fmt.Println("Indica la direccion:puerto a la cual desea conectarse")
 
-	var port string
-	fmt.Scanln(&port)
-	fmt.Print(port)
+	var puerto string
+	fmt.Scanln(&puerto)
+	fmt.Print(puerto)
 
-	CONNECT := port
-	c, err := net.Dial("tcp", CONNECT)
+	con, err := net.Dial("tcp", puerto)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	for {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Print(">> ")
-		text, _ := reader.ReadString('\n')
-		fmt.Fprintf(c, text+"\n")
+	logFile, err := os.Create("data/log.txt")
+	logger := log.New(logFile, ">>", log.LstdFlags)
 
-		message, _ := bufio.NewReader(c).ReadString('\n')
-		fmt.Print("->: " + message)
-		if strings.TrimSpace(string(text)) == "STOP" {
-			fmt.Println("TCP client exiting...")
-			return
-		}
+	fmt.Fprintf(con, "Listo\n")
+
+	antes := time.Now()
+	seDescargo := descargar("data/archivo.mp4", con)
+	despues := time.Now()
+
+	if  seDescargo != true {
+		logger.Println("Hubo un error descargando el archivo desde el servidor " + puerto)
+	} else {
+		seg := fmt.Sprintf("%f", despues.Sub(antes).Seconds())
+		logger.Println("Se descargó correctamente el archivo y tardó " + seg + " segundos")
 	}
 }
