@@ -10,42 +10,43 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 var logger *log.Logger
-const BUFFERSIZE = 512
+const BUFFERSIZE = 1024
 
 func enviarArchivo (conn net.Conn, in *bufio.Reader, srcFile string, nCLiente int) bool {
 
 	// Abre el archivo a enviar
 	arch, err := os.Open(srcFile)
 	if err != nil {
-		fmt.Println(err)
-		logger.Println("Hubo un error al abrir el archivo para enviar al cliente " + strconv.Itoa(nCLiente))
+		logger.Println("Hubo un error: ", err, " al abrir el archivo para enviar al cliente ", nCLiente)
 		return false
 	}
 	defer arch.Close()
 
 	hash := crearHash(arch)
-	fmt.Println(hash)
 
 	if hash != "" {
 
-		antes := time.Now()
+		// Abre de nuevo el archivo a enviar
+		arch, _ = os.Open(srcFile)
 
-		/**
 		// Envía el archivo al cliente
 		info, err := arch.Stat()
 		if err != nil {
-			fmt.Println(err)
+			logger.Println("Hubo un error al sacar el tamaño del archivo ", err)
 			return false
 		}
+		// Esto se usa para llenar el buffer del cliente y que este no se quede esperando
 		tamanio := completarString(strconv.FormatInt(info.Size(), 10), 10)
-		fmt.Println("Enviando el tamaño del archivo")
+		logger.Println("Enviando el tamaño del archivo")
+		antes := time.Now()
 		conn.Write([]byte(tamanio))
 		buffer := make([]byte, BUFFERSIZE)
-		fmt.Println("Empieza envío de archivo")
+		logger.Println("Empieza envío de archivo")
 		for {
 			_, err = arch.Read(buffer)
 			if err == io.EOF {
@@ -53,54 +54,39 @@ func enviarArchivo (conn net.Conn, in *bufio.Reader, srcFile string, nCLiente in
 			}
 			conn.Write(buffer)
 		}
-		*/
 
-		// Envía el archivo al cliente
-		arch, _ = os.Open(srcFile)
-		n , err := io.Copy(conn, arch)
-		fmt.Println("copió ", n)
+		msj0, err := in.ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
-			logger.Println("Hubo un error enviando el archivo al cliente " + strconv.Itoa(nCLiente))
+			logger.Println("Se produjo un error: ", err, "El cliente ", nCLiente, " no recibió el archivo")
 			return false
 		}
-
-		msj0, _ := in.ReadString('\n')
-		if err != nil {
-			fmt.Println(err)
-			logger.Println("El cliente ", strconv.Itoa(nCLiente), " no recibió el archivo")
-			return false
-		}
-		if msj0 == "OK" {
+		if msj0 == "OK" || msj0=="OK\n" {
 			fmt.Fprintln(conn, hash)
 			despues := time.Now()
-			fmt.Println("se recibió el archivo")
-
 			seg := fmt.Sprintf("%f", despues.Sub(antes).Seconds())
 			logger.Println("Se envió el archivo al cliente ", strconv.Itoa(nCLiente), "y tardó ", seg, " segundos")
 		} else {
-			logger.Println("El cliente ", strconv.Itoa(nCLiente), " no recibe el archivo")
+			logger.Println("El cliente ", nCLiente, " no recibe el archivo")
 			return false
 		}
-
 	} else {
-		logger.Println("Hubo un error al calcular el hash y enviarlo al cliente " + strconv.Itoa(nCLiente))
+		logger.Println("Hubo un error al calcular el hash y enviarlo al cliente ", nCLiente)
 		return false
 	}
 
 	defer conn.Close()
 
 	msj, err := in.ReadString('\n')
+	msj3 := strings.TrimSuffix(msj, "\n")
 	if err != nil {
-		fmt.Println(err)
-		logger.Println("El cliente " + strconv.Itoa(nCLiente) + " no pudo verificar la integridad del archivo")
+		logger.Println("Se produjo un error: ", err, " y el cliente ", nCLiente, " no pudo verificar la integridad del archivo")
 		return false
-	} else if msj != "Verificado" {
-		logger.Println("El cliente " + strconv.Itoa(nCLiente) + " no pudo verificar la integridad del archivo")
+	} else if msj3 != "Verificado" {
+		logger.Println("El cliente ", nCLiente, " no pudo verificar la integridad del archivo")
 		return false
 	}
 
-	logger.Println("Se envió correctamente el archivo al cliente " + strconv.Itoa(nCLiente))
+	logger.Println("Se envió correctamente el archivo al cliente ", nCLiente)
 
 	return true
 }
@@ -123,8 +109,7 @@ func crearHash (archivo *os.File) string {
 	hash := md5.New()
 
 	// Copia el archivo a la interfaz
-	n, err := io.Copy(hash, archivo)
-	fmt.Println("copió en hash ", n)
+	_, err := io.Copy(hash, archivo)
 	if err != nil {
 		return ""
 	}
@@ -138,7 +123,7 @@ func crearHash (archivo *os.File) string {
 
 func main() {
 
-	logFile, err := os.Create("data/log.txt")
+	logFile, err := os.Create("data/logServer.txt")
 	logger = log.New(logFile, ">>", log.LstdFlags)
 	logger.Println("Inicio")
 
@@ -186,7 +171,6 @@ func main() {
 			return
 		}
 		if msj1 == "Listo\n" || msj1 == "Listo" {
-			fmt.Println(i)
 			go enviarArchivo(conn, inCliente, archivo, i)
 		}
 
