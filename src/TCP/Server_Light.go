@@ -1,18 +1,13 @@
 package main
 
 import (
-	"bufio"
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
-	"strconv"
-	"strings"
-	"time"
 )
+
+const BUFFERSIZE = 1024
 
 func enviarArchivo (conn net.Conn, srcFile string) bool {
 
@@ -32,7 +27,7 @@ func enviarArchivo (conn net.Conn, srcFile string) bool {
 		conn.Write(buffer)
 	}
 
-	defer conn.Close()
+	conn.Close()
 
 	return true
 }
@@ -68,13 +63,14 @@ func main() {
 	fmt.Scanln(&numero)
 
 	i := 0
-	for {
+	for  {
 		conn, err := socket.Accept()
 		i ++
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
+
 		go enviarArchivo(conn, archivo)
 	}
 }

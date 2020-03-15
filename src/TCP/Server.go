@@ -19,6 +19,8 @@ const BUFFERSIZE = 1024
 
 func enviarArchivo (conn net.Conn, in *bufio.Reader, srcFile string, nCLiente int) bool {
 
+	defer conn.Close()
+
 	// Abre el archivo a enviar
 	arch, err := os.Open(srcFile)
 	if err != nil {
@@ -73,8 +75,6 @@ func enviarArchivo (conn net.Conn, in *bufio.Reader, srcFile string, nCLiente in
 		logger.Println("Hubo un error al calcular el hash y enviarlo al cliente ", nCLiente)
 		return false
 	}
-
-	defer conn.Close()
 
 	msj, err := in.ReadString('\n')
 	msj3 := strings.TrimSuffix(msj, "\n")
