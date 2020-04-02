@@ -1,4 +1,4 @@
-package UDP
+package main
 
 import (
 	"crypto/md5"
